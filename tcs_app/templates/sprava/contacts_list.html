@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <title>Kontakty</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; background:#f6f6f6; }
+    .box { max-width: 1200px; margin:0 auto; background:#fff; padding:20px; border-radius:8px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid #eee; padding:8px; text-align:left; font-size: 0.9em; }
+    th { background:#fafafa; }
+    .pager { margin-top: 20px; }
+    .pager a { margin: 0 6px; text-decoration:none; }
+    .search-form { margin-bottom: 15px; }
+    .search-form input { padding: 8px; width: 300px; border: 1px solid #ccc; border-radius: 4px; }
+    .search-form button { padding: 8px 12px; border: none; background-color: #007bff; color: white; border-radius: 4px; cursor: pointer; }
+    .search-form .clear-search { margin-left: 10px; color: #dc3545; text-decoration: none; }
+    .filters-container { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; padding: 15px; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 20px; }
+    .filter-group { display: flex; align-items: center; gap: 8px; }
+    .filter-group label { font-weight: bold; font-size: 0.9em; }
+    .filters-container select, .filters-container input[type="date"] { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+    .filters-container .status-filters a { text-decoration: none; color: #007bff; margin: 0 2px; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; }
+    .filters-container .status-filters a.active { font-weight: bold; background-color: #007bff; color: white; }
+    .tag { padding: 2px 6px; border-radius: 4px; font-size: 0.8em; color: white; }
+    .tag.vip { background-color: #ffc107; color: black; }
+    .tag.ok { background-color: #28a745; }
+    .tag.no { background-color: #dc3545; }
+    .clear-filters-btn {
+        padding: 8px 12px;
+        background-color: #6c757d;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 0.9em;
+        margin-left: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Kontakty</h1>
+    <p><a href="{% url 'sprava:sprava_dashboard' %}">Zpět na Správa</a></p>
+
+    <!-- Formulář pro vyhledávání -->
+    <form method="get" action="" class="search-form">
+        <input type="text" name="q" placeholder="Hledat jméno, telefon, info 2..." value="{{ request.GET.q|default:'' }}">
+        <button type="submit">Hledat</button>
+        {% if request.GET.q %}
+            <a href="{% url 'sprava:contacts_list' %}" class="clear-search">Zrušit hledání</a>
+        {% endif %}
+    </form>
+
+    <!-- Kontejner pro všechny filtry -->
+    <div class="filters-container">
+        
+        <form method="get" action="" style="margin:0; display:contents;">
+            <!-- Rozbalovací menu a kalendář -->
+            <div class="filter-group">
+                <label for="operator-select">Operátor:</label>
+                <select name="operator" id="operator-select" onchange="this.form.submit()">
+                    <option value="">-- Všichni --</option>
+                    {% for op in operators %}
+                        <option value="{{ op.id }}" {% if request.GET.operator|default:'' == op.id|stringformat:"s" %}selected{% endif %}>
+                            {{ op.get_full_name|default:op.username }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="customer-type-select">Typ zákazníka:</label>
+                <select name="customer_type" id="customer-type-select" onchange="this.form.submit()">
+                    <option value="">-- Všechny typy --</option>
+                    {% for type_opt in customer_type_options %}
+                        <option value="{{ type_opt }}" {% if request.GET.customer_type|default:'' == type_opt %}selected{% endif %}>
+                            {% if type_opt == 'vip' %}VIP{% else %}{{ type_opt }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Posl. hovor od:</label>
+                <input type="date" name="last_call_from" value="{{ request.GET.last_call_from|default:'' }}" onchange="this.form.submit()">
+            </div>
+            <div class="filter-group">
+                <label>do:</label>
+                <input type="date" name="last_call_to" value="{{ request.GET.last_call_to|default:'' }}" onchange="this.form.submit()">
+            </div>
+
+            <!-- Skrytá pole pro zachování ostatních filtrů při změně selectu/data -->
+            <input type="hidden" name="q" value="{{ request.GET.q|default:'' }}">
+            <input type="hidden" name="aktivni" value="{{ request.GET.aktivni|default:'' }}">
+            <input type="hidden" name="history" value="{{ request.GET.history|default:'' }}">
+        </form>
+
+        <!-- Ostatní filtry jako odkazy -->
+        {% with q=request.GET.q|default:'' op=request.GET.operator|default:'' c_type=request.GET.customer_type|default:'' akt=request.GET.aktivni|default:'' hist=request.GET.history|default:'' last_from=request.GET.last_call_from|default:'' last_to=request.GET.last_call_to|default:'' %}
+            <div class="filter-group status-filters">
+                <label>Stav:</label>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&aktivni=" class="{% if not akt %}active{% endif %}">Vše</a>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&aktivni=true" class="{% if akt == 'true' %}active{% endif %}">Aktivní</a>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&aktivni=false" class="{% if akt == 'false' %}active{% endif %}">Neaktivní</a>
+            </div>
+            <div class="filter-group status-filters">
+                <label>Historie:</label>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&history=" class="{% if not hist %}active{% endif %}">Vše</a>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&history=yes" class="{% if hist == 'yes' %}active{% endif %}">S historií</a>
+                <a href="?q={{ q|urlencode }}&operator={{ op }}&customer_type={{ c_type }}&last_call_from={{ last_from }}&last_call_to={{ last_to }}&history=no" class="{% if hist == 'no' %}active{% endif %}">Bez historie</a>
+            </div>
+        {% endwith %}
+        
+        <a href="{% url 'sprava:contacts_list' %}" class="clear-filters-btn">Vyčistit filtry</a>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Zák. číslo</th>
+          <th>Před. číslo</th>
+          <th>Jméno</th>
+          <th>Typ</th>
+          <th>VIP</th>
+          <th>Aktivní</th>
+          <th>Operátor</th>
+          <th>Hovorů</th>
+          <th>Posl. hovor</th>
+          <th>Aktualizace</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in contacts %}
+          <tr>
+            <td><a href="{% url 'sprava:kontakt_detail' k.id %}">{{ k.info_2 }}</a></td>
+            <td>{{ k.info_3 }}</td>
+            <td>{{ k.vorname }} {{ k.nachname }}</td>
+            <td>{{ k.recency }}</td>
+            <td>{% if k.vip %}<span class="tag vip">VIP</span>{% else %}-{% endif %}</td>
+            <td>{% if k.aktivni %}<span class="tag ok">Ano</span>{% else %}<span class="tag no">Ne</span>{% endif %}</td>
+            <td>
+              {% if k.assigned_operator %}
+                {{ k.assigned_operator.get_full_name|default:k.assigned_operator.username }}
+              {% else %}-{% endif %}
+            </td>
+            <td>{{ k.call_count }}</td>
+            <td>{% if k.last_call %}{{ k.last_call|date:"d.m.Y H:i" }}{% else %}-{% endif %}</td>
+            <td>{% if k.updated_at %}{{ k.updated_at|date:"d.m.Y H:i" }}{% else %}-{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="10">
+            {% if request.GET %}
+              Vašemu hledání a filtrům neodpovídají žádné kontakty.
+            {% else %}
+              Žádné kontakty v databázi.
+            {% endif %}
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Stránkování -->
+    <div class="pager">
+      {% with params=request.GET.urlencode %}
+        {% if contacts.has_previous %}
+          <a href="?page={{ contacts.previous_page_number }}&{{ params }}">« Předchozí</a>
+        {% endif %}
+        <span>Stránka {{ contacts.number }} / {{ contacts.paginator.num_pages }}</span>
+        {% if contacts.has_next %}
+          <a href="?page={{ contacts.next_page_number }}&{{ params }}">Další »</a>
+        {% endif %}
+      {% endwith %}
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <title>Editace kontaktu: {{ kontakt.vorname }} {{ kontakt.nachname }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+    .form-check-input { margin-top: 0.5em; }
+  </style>
+</head>
+<body>
+  <div class="container mt-4">
+    
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-success" role="alert">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Editace: {{ kontakt.vorname }} {{ kontakt.nachname }}</h1>
+        <a href="{% url 'sprava:contacts_list' %}" class="btn btn-secondary">‹ Zpět na seznam</a>
+    </div>
+
+    <div class="row g-4">
+      <!-- LEVÝ SLOUPEC: EDITAČNÍ FORMULÁŘ -->
+      <div class="col-md-5">
+        <div class="card">
+          <div class="card-header">
+            <h2>Detaily kontaktu</h2>
+          </div>
+          <div class="card-body">
+            <form method="post">
+              {% csrf_token %}
+              
+              {% for field in form %}
+                <div class="mb-3">
+                  <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                  {% if field.name == 'vip' or field.name == 'aktivni' %}
+                    <div class="form-check">
+                      {{ field }}
+                    </div>
+                  {% else %}
+                    {{ field }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+              
+              <button type="submit" class="btn btn-primary w-100">Uložit změny</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRAVÝ SLOUPEC: HISTORIE A KORESPONDENCE -->
+      <div class="col-md-7">
+        <!-- SEKCE HISTORIE VOLÁNÍ -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h2>Historie volání</h2>
+          </div>
+          <div class="card-body">
+            {% for h in historie %}
+              <div class="border-bottom pb-2 mb-2">
+                <p class="mb-1">
+                  <strong>{{ h.operator.get_full_name|default:h.operator.username }}</strong>
+                  <small class="text-muted float-end">{{ h.datum_cas|date:"d.m.Y H:i" }}</small>
+                </p>
+                <p class="mb-0">{{ h.poznamka|linebreaksbr }}</p>
+              </div>
+            {% empty %}
+              <p class="text-muted">Žádná historie volání.</p>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- SEKCE KORESPONDENCE -->
+        <div class="card">
+            <div class="card-header">
+              <h2>Korespondence</h2>
+            </div>
+            <div class="card-body">
+              <p class="text-muted">Zde bude zobrazena historie korespondence.</p>
+              <!-- Obsah pro korespondenci přijde později -->
+            </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,9 @@
+<h1>Nahrát vratky (CSV)</h1>
+{% for m in messages %}<p>{{ m }}</p>{% endfor %}
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Nahrát</button>
+</form>
+<p>Očekávané sloupce: info_2, DatumVratky, Duvod, Agent, CisloFaktury, DatumFaktury, CastkaFaktury, CastkaVratky</p>
+<p><a href="/sprava/">Zpět na Správa</a></p>

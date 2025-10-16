@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <title>Přihlášení</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: Arial, sans-serif; background:#f6f6f6; padding:40px; }
+      .box { max-width:360px; margin:0 auto; background:#fff; padding:24px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+      h1 { font-size:20px; margin-top:0; }
+      label { display:block; margin:12px 0 6px; }
+      input { width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; }
+      button { margin-top:16px; width:100%; padding:10px; background:#2d6cdf; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+      .msg { color:#c00; margin-top:10px; }
+      .logout { text-align:center; margin-top:12px; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>Přihlášení</h1>
+      <form method="post">
+        {% csrf_token %}
+        <label for="id_username">Uživatel</label>
+        <input type="text" name="username" id="id_username" required />
+
+        <label for="id_password">Heslo</label>
+        <input type="password" name="password" id="id_password" required />
+
+        <button type="submit">Přihlásit</button>
+
+        {% if form.errors %}
+          <div class="msg">Špatné jméno nebo heslo.</div>
+        {% endif %}
+      </form>
+      <div class="logout">
+        <a href="{% url 'logout' %}">Odhlásit</a>
+      </div>
+    </div>
+  </body>
+</html>
