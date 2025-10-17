@@ -1,0 +1,134 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}Správa a import vratek{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-box-seam-fill"></i> Správa a import vratek</h2>
+        <p class="lead">Na této stránce můžete nahrát .xlsx soubor s novými vratkami. Systém je automaticky zpracuje a přiřadí ke kontaktům.</p>
+    </div>
+</div>
+
+<!-- Zobrazení zpráv (messages) -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Formulář pro nahrání -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-cloud-upload-fill"></i> Importovat nový soubor
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <!-- Vykreslení formuláře s Bootstrap třídami -->
+            <div class="mb-3">
+                <label for="{{ form.file.id_for_label }}" class="form-label">{{ form.file.label }}</label>
+                {{ form.file }}
+                <div class="form-text">{{ form.file.help_text }}</div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle-fill"></i> Nahrát a zpracovat</button>
+        </form>
+        <div class="alert alert-light mt-3" role="alert">
+            <strong>Očekávané sloupce v .xlsx souboru:</strong><br>
+            <code>Co.</code>, <code>Agent No.</code>, <code>Acct No.</code>, <code>Inv. No.</code>, <code>Inv Date</code>, <code>Inv Amount</code>, <code>Return Date</code>, <code>Return Type</code>, <code>Return Amount</code>
+        </div>
+    </div>
+</div>
+
+<!-- Zobrazení shrnutí po importu -->
+{% if summary %}
+<div class="card mb-4">
+    <div class="card-header bg-info text-white">
+        <i class="bi bi-clipboard-data-fill"></i> Výsledek zpracování
+    </div>
+    <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Celkem řádků v souboru:
+                <span class="badge bg-secondary rounded-pill">{{ summary.total_rows }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Úspěšně zpracováno:
+                <span class="badge bg-success rounded-pill">{{ summary.processed }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Přeskočeno (chybějící data):
+                <span class="badge bg-warning text-dark rounded-pill">{{ summary.skipped }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Chyby:
+                <span class="badge bg-danger rounded-pill">{{ summary.errors }}</span>
+            </li>
+        </ul>
+        {% if summary.error_details %}
+            <div class="mt-3">
+                <p><strong>Detaily chyb:</strong></p>
+                <ul class="list-group">
+                    {% for error in summary.error_details %}
+                    <li class="list-group-item list-group-item-danger">Řádek {{ error.row }}: {{ error.error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Tabulka s posledními vratkami -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-clock-history"></i> Historie posledních 100 importovaných vratek
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead>
+                    <!-- ZMĚNA: Upravená hlavička tabulky -->
+                    <tr>
+                        <th>Datum importu</th>
+                        <th>Zákaznické číslo</th>
+                        <th>Číslo faktury</th>
+                        <th>Datum vratky</th>
+                        <th>Typ vratky</th>
+                        <th>Částka vratky</th>
+                        <th>Agent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vratka in vratky %}
+                    <tr>
+                        <!-- ZMĚNA: Upravené řádky tabulky -->
+                        <td>{{ vratka.datum_importu|date:"d.m.Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'sprava:kontakt_detail' vratka.kontakt.id %}">
+                                <code>{{ vratka.kontakt.info_2 }}</code>
+                            </a>
+                        </td>
+                        <td>{{ vratka.cislo_faktury|default:"-" }}</td>
+                        <td>{{ vratka.datum_vratky|date:"d.m.Y" }}</td>
+                        <td>{{ vratka.duvod|default:"-" }}</td>
+                        <td>{{ vratka.castka_vratky }} Kč</td>
+                        <td>{{ vratka.agent|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <!-- ZMĚNA: Upravený colspan -->
+                        <td colspan="7" class="text-center text-muted">Zatím nebyly naimportovány žádné vratky.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

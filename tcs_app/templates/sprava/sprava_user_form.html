@@ -1,0 +1,22 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<h1 class="h2 mb-4">{{ page_title }}</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            {{ form.as_p }} 
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-success">Uložit uživatele</button>
+                <a href="{% url 'sprava:sprava_uzivatele_overview' %}" class="btn btn-secondary">Zrušit</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -8,51 +8,82 @@ from io import TextIOWrapper
 import csv
 from datetime import datetime
 import re
-
-# Upravený import modelů - přibyl model Historie
-from contacts.models import Kontakt, Historie
+from contacts.models import Kontakt, Historie, Vratka
 from django.db.models import Count, Max, Q
 from django.core.paginator import Paginator
-from django.contrib.auth.models import User
+from .models import CustomUser
 from datetime import date, timedelta
 
 from .forms import KontaktEditForm
 
+from django.utils import timezone
+from decimal import Decimal
+import pandas as pd
+import traceback
+
+from .forms import KontaktEditForm, VratkaForm, UserCreationForm, UserEditForm
 
 class CSVImportForm(forms.Form):
     csv_file = forms.FileField(label="CSV soubor")
 
 
-def dashboard(request):
-    return HttpResponse(
-        '<h1>Správa – funguje</h1>'
-        '<ul>'
-        '<li><a href="/sprava/upload-contacts/">Nahrát kontakty (CSV)</a></li>'
-        '<li><a href="/sprava/contacts-list/">Zobrazit seznam kontaktů</a></li>'
-        '<li><a href="/sprava/returns/import/">Nahrát vratky (CSV/XLSX)</a></li>'
-        '</ul>'
-    )
-
+# =============================================================================
+# POMOCNÉ FUNKCE
+# =============================================================================
 
 def is_admin(user):
     return user.is_authenticated and user.is_staff
 
-
-# Normalizace dat
 def norm_phone(s: str) -> str:
-    """
-    Ponechá '+' a číslice, odstraní mezery, pomlčky, závorky apod.
-    """
-    if not s:
-        return ""
-    s = s.strip()
-    s = re.sub(r"[^\d+]", "", s)
-    return s
-
+    if not s: return ""
+    return re.sub(r"[^\d+]", "", s.strip())
 
 def norm_text(s: str) -> str:
     return s.strip() if isinstance(s, str) else s
 
+# =============================================================================
+# HLAVNÍ STRÁNKA (DASHBOARD)
+# =============================================================================
+
+@login_required
+@user_passes_test(is_admin)
+def sprava_dashboard(request):
+    """
+    Zobrazí hlavní uvítací stránku (dashboard).
+    """
+    context = {'page_title': 'Hlavní přehled'}
+    return render(request, 'sprava/sprava_dashboard.html', context)
+
+# =============================================================================
+# SEKCE: DATABÁZE
+# =============================================================================
+
+@login_required
+@user_passes_test(is_admin)
+def sprava_databaze_overview(request):
+    """
+    Zobrazí přehled (overview) pro sekci Databáze s klíčovými statistikami.
+    """
+    all_contacts = Kontakt.objects.all()
+    total_contacts = all_contacts.count()
+    active_contacts = all_contacts.filter(aktivni=True).count()
+    inactive_contacts = total_contacts - active_contacts
+    vip_contacts = all_contacts.filter(vip=True).count()
+    active_without_history = Kontakt.objects.annotate(call_count=Count('historie')).filter(aktivni=True, call_count=0).count()
+    last_return_import = Vratka.objects.order_by('-datum_importu').first()
+    last_contact_import = Kontakt.objects.order_by('-id').first()
+
+    context = {
+        'page_title': 'Přehled databáze',
+        'total_contacts': total_contacts,
+        'active_contacts': active_contacts,
+        'inactive_contacts': inactive_contacts,
+        'vip_contacts': vip_contacts,
+        'active_without_history': active_without_history,
+        'last_return_import_date': last_return_import.datum_importu if last_return_import else None,
+        'last_contact_import_date': last_contact_import.updated_at if last_contact_import else None,
+    }
+    return render(request, 'sprava/sprava_databaze_overview.html', context)
 
 @login_required
 @user_passes_test(is_admin)
@@ -73,11 +104,9 @@ def upload_contacts(request):
         form = CSVImportForm(request.POST, request.FILES)
         if form.is_valid():
             csv_file = request.FILES["csv_file"]
-            # Používáme 'replace' místo 'ignore' pro lepší diagnostiku chyb kódování
             decoded_file = TextIOWrapper(csv_file, encoding="utf-8", errors='replace')
             reader = csv.DictReader(decoded_file)
             
-            # Načteme celé CSV do paměti pro efektivnější zpracování
             try:
                 rows = list(reader)
             except csv.Error as e:
@@ -88,12 +117,9 @@ def upload_contacts(request):
             updated_count = 0
             skipped_duplicates = 0
             
-            # --- OPTIMALIZACE: Načtení dat předem ---
-            # 1. Získáme všechny unikátní klíče (info_2 a telefon1) z CSV
             all_info_2 = {norm_text(r.get("info_2", "")) for r in rows if r.get("info_2")}
             all_telefon1 = {norm_phone(r.get("Telefon1", "")) for r in rows if r.get("Telefon1")}
 
-            # 2. Načteme všechny relevantní existující kontakty z DB pomocí dvou dotazů
             existing_by_info_2 = {k.info_2: k for k in Kontakt.objects.filter(info_2__in=all_info_2)}
             existing_by_telefon1 = {k.telefon1: k for k in Kontakt.objects.filter(telefon1__in=all_telefon1)}
             
@@ -103,11 +129,8 @@ def upload_contacts(request):
             with transaction.atomic():
                 for raw_row in rows:
                     row = {k: fix_chars(v) for k, v in raw_row.items()}
-
                     telefon1 = norm_phone(row.get("Telefon1") or "")
                     info_2 = norm_text(row.get("info_2") or "")
-
-                    # Deduplikace v rámci jednoho CSV
                     key = (telefon1 or "", info_2 or "")
                     if not any(key) or key in seen_keys:
                         if any(key):
@@ -115,7 +138,6 @@ def upload_contacts(request):
                         continue
                     seen_keys.add(key)
 
-                    # Najdi existující kontakt – teď už jen v paměti (slovnících)
                     existing_kontakt = None
                     if info_2:
                         existing_kontakt = existing_by_info_2.get(info_2)
@@ -123,14 +145,12 @@ def upload_contacts(request):
                         existing_kontakt = existing_by_telefon1.get(telefon1)
 
                     if existing_kontakt:
-                        # Aktualizace
                         new_info3 = norm_text(row.get("info_3") or "")
                         if existing_kontakt.info_3 != new_info3:
                             existing_kontakt.info_3 = new_info3
                             existing_kontakt.save(update_fields=["info_3"])
                             updated_count += 1
                     else:
-                        # Příprava pro vytvoření nového kontaktu
                         datum_str = norm_text(row.get("Geburtsdatum") or "")
                         geburtsdatum = None
                         if datum_str:
@@ -139,7 +159,6 @@ def upload_contacts(request):
                             except ValueError:
                                 geburtsdatum = None
                         
-                        # Přidáme nový kontakt do seznamu pro hromadné vytvoření
                         contacts_to_create.append(Kontakt(
                             info_2=info_2,
                             info_3=norm_text(row.get("info_3") or ""),
@@ -162,11 +181,7 @@ def upload_contacts(request):
                             aktivni=True,
                         ))
 
-                # Hromadné vytvoření všech nových kontaktů jedním dotazem
                 if contacts_to_create:
-                    # ignore_conflicts=True přeskočí vkládání řádků, které by porušily unique omezení
-                    # (např. pokud by dva řádky v CSV měly stejné info_2, ale my to neodchytili)
-                    # POZN: Pro plnou podporu je vyžadována databáze PostgreSQL.
                     Kontakt.objects.bulk_create(contacts_to_create, ignore_conflicts=True)
                     created_count = len(contacts_to_create)
 
@@ -183,17 +198,14 @@ def upload_contacts(request):
 @login_required
 @user_passes_test(is_admin)
 def contacts_list(request):
-    # Získáme všechny parametry z URL adresy
     query = request.GET.get('q', '').strip()
     filter_operator_id = request.GET.get('operator')
     filter_aktivni = request.GET.get('aktivni')
     filter_history = request.GET.get('history')
     filter_last_call_from = request.GET.get('last_call_from')
     filter_last_call_to = request.GET.get('last_call_to')
-    # Nový sjednocený parametr pro typ zákazníka
     filter_customer_type = request.GET.get('customer_type')
 
-    # Základní QuerySet
     qs = (
         Kontakt.objects
         .select_related('assigned_operator')
@@ -204,8 +216,6 @@ def contacts_list(request):
         .order_by('-id')
     )
 
-    # --- APLIKACE FILTRŮ ---
-
     if query:
         qs = qs.filter(
             Q(vorname__icontains=query) | Q(nachname__icontains=query) |
@@ -214,7 +224,6 @@ def contacts_list(request):
     if filter_operator_id:
         qs = qs.filter(assigned_operator_id=filter_operator_id)
     
-    # Nová logika pro sjednocený filtr "Typ zákazníka"
     if filter_customer_type == 'vip':
         qs = qs.filter(vip=True)
     elif filter_customer_type:
@@ -238,12 +247,9 @@ def contacts_list(request):
     except (ValueError, TypeError):
         pass
 
-    # --- PŘÍPRAVA DAT PRO ŠABLONU ---
-    operators = User.objects.filter(is_staff=True).order_by('username')
-    
-    # Vytvoříme seznam pro nový sjednocený filtr
+    operators = CustomUser.objects.filter(is_staff=True).order_by('username')
     recency_options = list(Kontakt.objects.exclude(recency__isnull=True).exclude(recency__exact='').values_list('recency', flat=True).distinct().order_by('recency'))
-    customer_type_options = ['vip'] + recency_options # Přidáme 'vip' na začátek
+    customer_type_options = ['vip'] + recency_options
 
     paginator = Paginator(qs, 50)
     page = request.GET.get("page")
@@ -256,24 +262,187 @@ def contacts_list(request):
     }
     return render(request, "sprava/contacts_list.html", context)
 
+@login_required  
+@user_passes_test(is_admin)  
+def kontakt_detail(request, kontakt_id):  
+    kontakt = get_object_or_404(Kontakt, pk=kontakt_id)  
+    historie = Historie.objects.filter(kontakt=kontakt).select_related('operator').order_by('-datum_cas')  
+    vratky = Vratka.objects.filter(kontakt=kontakt).order_by('-datum_vratky')  
+  
+    if request.method == 'POST':  
+        form = KontaktEditForm(request.POST, instance=kontakt)  
+        if form.is_valid():  
+            form.save()  
+            messages.success(request, 'Údaje o kontaktu byly úspěšně aktualizovány.')  
+            return redirect('sprava:kontakt_detail', kontakt_id=kontakt.id)  
+    else:  
+        form = KontaktEditForm(instance=kontakt)  
+  
+    context = {  
+        'kontakt': kontakt,  
+        'historie': historie,  
+        'form': form,  
+        'vratky': vratky,   
+    }  
+    return render(request, 'sprava/kontakt_detail.html', context)
+
+@login_required  
+@user_passes_test(is_admin) 
+def sprava_vratek(request):  
+    summary = None  
+    if request.method == 'POST':  
+        form = VratkaForm(request.POST, request.FILES)  
+        if form.is_valid():  
+            excel_file = form.cleaned_data['file']  
+              
+            if excel_file.size > 10 * 1024 * 1024:  
+                messages.error(request, "Soubor je příliš velký (max 10 MB).")  
+                return redirect('sprava:sprava_vratek') 
+  
+            try:  
+                messages.info(request, "Soubor byl přijat a zpracovává se. To může chvíli trvat, prosím vyčkejte.")  
+  
+                xls = pd.ExcelFile(excel_file)  
+                sheet_name = xls.sheet_names[0]  
+                  
+                header_row = -1  
+                for i in range(10):  
+                    try:  
+                        test_df = pd.read_excel(xls, sheet_name=sheet_name, header=i, nrows=1)
+                        test_df.columns = test_df.columns.str.strip() 
+                        if 'Acct No.' in test_df.columns and 'Return Date' in test_df.columns:  
+                            header_row = i  
+                            break  
+                    except Exception:  
+                        continue  
+                  
+                if header_row == -1:  
+                    messages.error(request, "Nepodařilo se najít hlavičku v souboru. Ujistěte se, že soubor obsahuje sloupce 'Acct No.' a 'Return Date'.")  
+                    return redirect('sprava:sprava_vratek') 
+  
+                df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row, dtype={'Acct No.': str})  
+                df.columns = df.columns.str.strip()
+  
+                column_map = {  
+                    'Agent No.': 'Agent', 'Acct No.': 'Kd_Nr', 'Inv. No.': 'Rg_Nr', 'Inv Date': 'Rg_Datum',  
+                    'Inv Amount': 'Rg_Betrag', 'Return Date': 'Datum_Retoure', 'Return Type': 'Retour_Typ', 'Return Amount': 'Betrag_Retoure'  
+                }  
+                df_columns = {col: column_map[col] for col in column_map if col in df.columns}  
+                df.rename(columns=df_columns, inplace=True)  
+  
+                summary = {"total_rows": len(df), "processed": 0, "updated": 0, "skipped": 0, "errors": 0, "error_details": []}  
+  
+                for index, row in df.iterrows():  
+                    try:  
+                        if pd.isna(row['Kd_Nr']) or pd.isna(row['Datum_Retoure']):  
+                            summary['skipped'] += 1  
+                            continue  
+  
+                        customer_id = str(row['Kd_Nr']).strip()  
+                        invoice_id = str(row['Rg_Nr']).strip() if pd.notna(row['Rg_Nr']) else None  
+                        return_date, invoice_date = None, None  
+                        return_amount, invoice_amount = Decimal('0.00'), Decimal('0.00')  
+  
+                        if pd.notna(row['Datum_Retoure']): return_date = pd.to_datetime(str(int(row['Datum_Retoure'])), format='%Y%m%d').date()  
+                        if pd.notna(row['Rg_Datum']): invoice_date = pd.to_datetime(str(int(row['Rg_Datum'])), format='%Y%m%d').date()  
+                        if pd.notna(row['Betrag_Retoure']): return_amount = Decimal(str(row['Betrag_Retoure']).replace(',', '.'))  
+                        if pd.notna(row['Rg_Betrag']): invoice_amount = Decimal(str(row['Rg_Betrag']).replace(',', '.'))  
+  
+                        kontakt, created = Kontakt.objects.get_or_create(info_2=customer_id, defaults={'nachname': 'Zákazník z vratky', 'vorname': '', 'aktivni': True}) 
+  
+                        Vratka.objects.update_or_create(  
+                            kontakt=kontakt, cislo_faktury=invoice_id, datum_vratky=return_date,  
+                            defaults={  
+                                'duvod': row.get('Retour_Typ'), 'castka_vratky': return_amount, 'agent': row.get('Agent'),  
+                                'datum_faktury': invoice_date, 'castka_faktury': invoice_amount, 'datum_importu': timezone.now()  
+                            }  
+                        )  
+                        summary['updated'] += 1  
+                        summary['processed'] += 1  
+  
+                    except Exception as e:  
+                        summary['errors'] += 1  
+                        summary['error_details'].append({"row": index + header_row + 2, "error": str(e)})  
+  
+                messages.success(request, "Soubor byl úspěšně zpracován.")  
+  
+            except Exception as e:  
+                messages.error(request, f"Nastala kritická chyba při zpracování souboru: {e}. Zkontrolujte formát souboru a zkuste to znovu.")  
+                return redirect('sprava:sprava_vratek')
+        else:  
+            messages.error(request, "Formulář obsahuje chyby. Prosím, nahrajte platný .xlsx soubor.")  
+            return redirect('sprava:sprava_vratek')
+  
+    form = VratkaForm()  
+    vratky = Vratka.objects.select_related('kontakt').order_by('-datum_importu')[:100]  
+    context = {'form': form, 'vratky': vratky, 'summary': summary}  
+    return render(request, 'sprava/sprava_vratek.html', context)
+
+# =============================================================================
+# SEKCE: OSTATNÍ (PLACEHOLDERY)
+# =============================================================================
+
+@login_required  
+@user_passes_test(is_admin)  
+def sprava_reporty_overview(request):  
+    context = {'page_title': 'Reporty'}  
+    return render(request, 'sprava/_placeholder.html', context)  
+  
+@login_required  
+@user_passes_test(is_admin)  
+def sprava_podklady_overview(request):  
+    context = {'page_title': 'Podklady'}  
+    return render(request, 'sprava/_placeholder.html', context)  
+  
+@login_required  
+@user_passes_test(is_admin)  
+def sprava_aktivity_overview(request):  
+    context = {'page_title': 'Přehled aktivit'}  
+    return render(request, 'sprava/_placeholder.html', context)  
+  
+@login_required  
+@user_passes_test(is_admin)  
+def sprava_uzivatele_overview(request):  
+    users = CustomUser.objects.all().order_by('last_name')
+    context = {
+        'page_title': 'Správa uživatelů',
+        'users': users,
+    }  
+    return render(request, 'sprava/sprava_uzivatele_list.html', context)
+
 @login_required
 @user_passes_test(is_admin)
-def kontakt_detail(request, kontakt_id):
-    kontakt = get_object_or_404(Kontakt, pk=kontakt_id)
-    historie = Historie.objects.filter(kontakt=kontakt).select_related('operator').order_by('-datum_cas')
-
+def user_create_view(request):
     if request.method == 'POST':
-        form = KontaktEditForm(request.POST, instance=kontakt)
+        form = UserCreationForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Údaje o kontaktu byly úspěšně aktualizovány.')
-            return redirect('sprava:kontakt_detail', kontakt_id=kontakt.id)
+            messages.success(request, 'Uživatel byl úspěšně vytvořen.')
+            return redirect('sprava:sprava_uzivatele_overview')
     else:
-        form = KontaktEditForm(instance=kontakt)
-
+        form = UserCreationForm()
+    
     context = {
-        'kontakt': kontakt,
-        'historie': historie,
-        'form': form,
+        'page_title': 'Vytvořit nového uživatele',
+        'form': form
     }
-    return render(request, 'sprava/kontakt_detail.html', context)
+    return render(request, 'sprava/sprava_user_form.html', context)
+
+@login_required  
+@user_passes_test(is_admin)  
+def user_edit_view(request, user_id):  
+    user = get_object_or_404(CustomUser, pk=user_id)  
+    if request.method == 'POST':  
+        form = UserEditForm(request.POST, instance=user)  
+        if form.is_valid():  
+            form.save()  
+            messages.success(request, f'Uživatel "{user.username}" byl úspěšně upraven.')  
+            return redirect('sprava:sprava_uzivatele_overview')  
+    else:  
+        form = UserEditForm(instance=user)  
+      
+    context = {  
+        'page_title': f'Upravit uživatele: {user.username}',  
+        'form': form  
+    }  
+    return render(request, 'sprava/sprava_user_form.html', context)

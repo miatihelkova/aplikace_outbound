@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.db import models
-from django.contrib.auth.models import User
 from django.utils import timezone
 
 STATUS_CHOICES = [
@@ -16,8 +15,6 @@ STATUS_CHOICES = [
 ]
 
 class Kontakt(models.Model):
-    # U pole info_2 ponecháváme null=True, protože má unikátní omezení (unique=True).
-    # To umožňuje mít v databázi více kontaktů bez zákaznického čísla, aniž by to způsobilo chybu.
     info_2 = models.CharField(max_length=50, blank=True,  null=True, db_index=True, unique=True, verbose_name="Zákaznické číslo")
     info_3 = models.CharField(max_length=50, blank=True, default='', db_index=True, verbose_name="Přednostní číslo")
     ansprache = models.CharField(max_length=20, blank=True, default='', verbose_name="Oslovení (Pohlaví)")
@@ -54,7 +51,6 @@ class Kontakt(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Poslední aktualizace")
 
     def __str__(self):
-        # Zobrazí jméno a příjmení, pokud existují, jinak jen info_2
         full_name = f"{self.vorname} {self.nachname}".strip()
         return f"{full_name} ({self.info_2 or 'bez čísla'})"
 
@@ -94,7 +90,7 @@ class DopisovaSablona(models.Model):
 
 
 class UserDopisovaSablona(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Uživatel (operátor)")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="Uživatel (operátor)")
     base_sablona = models.ForeignKey(DopisovaSablona, on_delete=models.CASCADE, verbose_name="Základní šablona")
     text_muz = models.TextField(blank=True, default='', verbose_name="Uživatelský text pro muže")
     text_zena = models.TextField(blank=True, default='', verbose_name="Uživatelský text pro ženy")
@@ -133,7 +129,7 @@ class OperatorAction(models.Model):
         (CALL_HANDLING, 'Call Handling'),
         (OTHER, 'Other'),
     ]
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='operator_actions', verbose_name='Operátor')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='operator_actions', verbose_name='Operátor')
     action_type = models.CharField(max_length=20, choices=ACTION_CHOICES, verbose_name='Typ akce')
     start_time = models.DateTimeField(default=timezone.now, verbose_name='Čas začátku')
     end_time = models.DateTimeField(null=True, blank=True, verbose_name='Čas ukončení')
@@ -175,7 +171,7 @@ class Vratka(models.Model):
 
 class Historie(models.Model):
     kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name='historie')
-    operator = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     datum_cas = models.DateTimeField(auto_now_add=True)
     poznamka = models.TextField()
 
@@ -185,6 +181,5 @@ class Historie(models.Model):
         ordering = ['-datum_cas']
 
     def __str__(self):
-        # Vylepšená reprezentace, která zahrnuje i operátora, pokud je přiřazen
         operator_str = f" (operátor: {self.operator.username})" if self.operator else ""
         return f"Záznam pro {self.kontakt} dne {self.datum_cas.strftime('%d.%m.%Y')}{operator_str}"
