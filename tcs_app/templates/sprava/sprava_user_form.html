@@ -10,7 +10,20 @@
         <form method="post" novalidate>
             {% csrf_token %}
             
-            {{ form.as_p }} 
+            {% for field in form %}  
+        <div class="mb-3">  
+            {{ field.label_tag }}  
+            {{ field }}  
+            {% if field.help_text %}  
+                <small class="form-text text-muted">{{ field.help_text }}</small>  
+            {% endif %}  
+            {% for error in field.errors %}  
+                <div class="invalid-feedback d-block">  
+                    {{ error }}  
+                </div>  
+            {% endfor %}  
+        </div>  
+    {% endfor %}
             
             <div class="mt-4">
                 <button type="submit" class="btn btn-success">Uložit uživatele</button>
@@ -19,4 +32,13 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    flatpickr(".datepicker", {
+        "locale": "cs",
+        "dateFormat": "d.m.Y",
+    });
+</script>
 {% endblock %}

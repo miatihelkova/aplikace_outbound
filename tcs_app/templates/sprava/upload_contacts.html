@@ -29,10 +29,17 @@
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             
-            <!-- Vykreslení formuláře s Bootstrap třídami -->
             <div class="mb-3">
-                <label for="{{ form.csv_file.id_for_label }}" class="form-label">{{ form.csv_file.label }}</label>
-                <input type="file" name="csv_file" class="form-control" required id="id_csv_file">
+                {{ form.file.label_tag }}
+                {{ form.file }}
+                
+                {% if form.file.help_text %}
+                    <div class="form-text">{{ form.file.help_text }}</div>
+                {% endif %}
+
+                {% for error in form.file.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             
             <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle-fill"></i> Nahrát a zpracovat</button>

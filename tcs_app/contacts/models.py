@@ -49,6 +49,11 @@ class Kontakt(models.Model):
         verbose_name="Přiřazený operátor",
     )
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Poslední aktualizace")
+    datum_prirazeni = models.DateTimeField(  
+        null=True,  
+        blank=True,  
+        verbose_name="Datum posledního přiřazení"  
+    )
 
     def __str__(self):
         full_name = f"{self.vorname} {self.nachname}".strip()
@@ -169,17 +174,22 @@ class Vratka(models.Model):
         datum_str = self.datum_vratky.strftime('%d.%m.%Y') if self.datum_vratky else "N/A"
         return f"Vratka pro {self.kontakt} ze dne {datum_str}"
 
-class Historie(models.Model):
-    kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name='historie')
-    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    datum_cas = models.DateTimeField(auto_now_add=True)
-    poznamka = models.TextField()
-
-    class Meta:
-        verbose_name = "Záznam historie"
-        verbose_name_plural = "Záznamy historie"
-        ordering = ['-datum_cas']
-
-    def __str__(self):
-        operator_str = f" (operátor: {self.operator.username})" if self.operator else ""
-        return f"Záznam pro {self.kontakt} dne {self.datum_cas.strftime('%d.%m.%Y')}{operator_str}"
+class Historie(models.Model):  
+    kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name='historie')  
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)  
+    datum_cas = models.DateTimeField(auto_now_add=True)  
+      
+    # --- NOVÁ POLE ---  
+    status = models.CharField(  
+        max_length=20,   
+        choices=STATUS_CHOICES,   
+        verbose_name="Status hovoru",  
+        blank=True, # Povolíme prázdné pro případ, že jde jen o poznámku  
+        default=''  
+    )  
+    poznamka = models.TextField(verbose_name="Poznámka k hovoru")  
+    naplanovany_hovor = models.DateTimeField(  
+        null=True,   
+        blank=True,   
+        verbose_name="Datum naplánovaného hovoru"  
+    )

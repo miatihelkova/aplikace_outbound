@@ -1,0 +1,18 @@
+{% extends "operatori/base_operator.html" %}
+
+{% block title %}Hlavní přehled{% endblock %}
+
+{% block content %}
+    <div class="page-header">
+        <h1>Hlavní přehled</h1>
+    </div>
+    <div class="p-5 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-5">
+            <h1 class="display-5 fw-bold">Vítejte, {{ request.user.first_name|default:request.user.username }}!</h1>
+            <p class="col-md-8 fs-4">Toto je váš hlavní přehled. V budoucnu zde uvidíte své denní statistiky, počet hovorů a úspěšnost prodejů.</p>
+            <a href="{% url 'operatori:dalsi_kontakt' %}" class="btn btn-primary btn-lg" type="button">
+                Přejít na kontakty a začít pracovat
+            </a>
+        </div>
+    </div>
+{% endblock %}
