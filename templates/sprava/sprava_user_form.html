@@ -1,0 +1,44 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<h1 class="h2 mb-4">{{ page_title }}</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            {% for field in form %}  
+        <div class="mb-3">  
+            {{ field.label_tag }}  
+            {{ field }}  
+            {% if field.help_text %}  
+                <small class="form-text text-muted">{{ field.help_text }}</small>  
+            {% endif %}  
+            {% for error in field.errors %}  
+                <div class="invalid-feedback d-block">  
+                    {{ error }}  
+                </div>  
+            {% endfor %}  
+        </div>  
+    {% endfor %}
+            
+            <div class="mt-4">
+                <button type="submit" class="btn btn-success">Uložit uživatele</button>
+                <a href="{% url 'sprava:sprava_uzivatele_overview' %}" class="btn btn-secondary">Zrušit</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    flatpickr(".datepicker", {
+        "locale": "cs",
+        "dateFormat": "d.m.Y",
+    });
+</script>
+{% endblock %}

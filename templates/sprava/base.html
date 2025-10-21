@@ -1,0 +1,128 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Manažerská sekce{% endblock %} - TCS App</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+    <style>
+        body { padding-bottom: 70px; }
+        .navbar-nav .nav-link.active { font-weight: bold; color: #ffffff !important; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #004a99;">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'sprava:sprava_dashboard' %}">
+                <i class="bi bi-gear-fill"></i> TCS App - Správa
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'sprava_dashboard' %}active{% endif %}" href="{% url 'sprava:sprava_dashboard' %}">
+                            <i class="bi bi-house-fill"></i> Hlavní přehled
+                        </a>
+                    </li>
+                    
+                    <li class="nav-item dropdown">
+                        <div class="nav-link d-flex p-0">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'databaze_overview' %}active{% endif %}" href="{% url 'sprava:databaze_overview' %}">
+                                <i class="bi bi-database-fill"></i> Databáze
+                            </a>
+                            <a class="nav-link dropdown-toggle dropdown-toggle-split {% if 'databaze' in request.resolver_match.url_name and request.resolver_match.url_name != 'databaze_overview' %}active{% endif %}" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Toggle Dropdown</span>
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="navbarDropdownDatabase">
+                                <li><a class="dropdown-item" href="{% url 'sprava:contacts_list' %}">Seznam kontaktů</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'sprava:upload_contacts' %}">Import kontaktů (CSV)</a></li>
+                                <li><a class="dropdown-item" href="{% url 'sprava:vratky' %}">Import vratek (XLSX)</a></li>
+                            </ul>
+                        </div>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'reporty' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sprava:reporty_overview' %}">
+                            <i class="bi bi-file-earmark-bar-graph-fill"></i> Reporty
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'podklady' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sprava:podklady_overview' %}">
+                            <i class="bi bi-folder-fill"></i> Podklady
+                        </a>
+                    </li>
+
+                    <!-- === ZMĚNA: Původní odkaz na Aktivity nahrazen rozbalovacím menu === -->
+                    <li class="nav-item dropdown">
+                        <div class="nav-link d-flex p-0">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'sprava_aktivity_overview' %}active{% endif %}" href="{% url 'sprava:aktivity_overview' %}">
+                                <i class="bi bi-activity"></i> Přehled aktivit
+                            </a>
+                            <a class="nav-link dropdown-toggle dropdown-toggle-split {% if request.resolver_match.url_name == 'sprava_historie_hovoru' %}active{% endif %}" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Toggle Dropdown</span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{% url 'sprava:sprava_historie_hovoru' %}">Historie hovorů</a></li>
+                                <!-- Zde je místo pro budoucí položky -->
+                            </ul>
+                        </div>
+                    </li>
+                    <!-- ======================= KONEC ZMĚNY ============================ -->
+
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'uzivatele' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'sprava:sprava_uzivatele_overview' %}">
+                            <i class="bi bi-people-fill"></i> Uživatelé
+                        </a>
+                    </li>
+                </ul>
+                
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="navbar-text me-3">
+                                <i class="bi bi-person-circle"></i> Přihlášen: {{ user.username }}
+                            </span>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-5">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer mt-auto py-3 bg-light fixed-bottom border-top">
+        <div class="container text-center">
+            <span class="text-muted">© {% now "Y" %} Tvoje Společnost</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/cs.js"></script>
+    
+    {% block extra_js %}{% endblock %}
+
+</body>
+</html>

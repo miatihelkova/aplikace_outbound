@@ -1,0 +1,107 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}Databáze{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <h1 class="mt-4">Databáze</h1>
+    <ol class="breadcrumb mb-4">
+        <li class="breadcrumb-item active">Přehled a správa databáze kontaktů</li>
+    </ol>
+
+    <!-- Řádek se statistikami -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body"><div class="row no-gutters align-items-center"><div class="col mr-2">
+                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Kontaktů celkem</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_contacts|default:"N/A" }}</div>
+                </div><div class="col-auto"><i class="fas fa-users fa-2x text-gray-300"></i></div></div></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body"><div class="row no-gutters align-items-center"><div class="col mr-2">
+                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Aktivní / Neaktivní</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ active_contacts|default:"N/A" }} / {{ inactive_contacts|default:"N/A" }}</div>
+                </div><div class="col-auto"><i class="fas fa-user-check fa-2x text-gray-300"></i></div></div></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body"><div class="row no-gutters align-items-center"><div class="col mr-2">
+                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">VIP Kontakty</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ vip_contacts|default:"N/A" }}</div>
+                </div><div class="col-auto"><i class="fas fa-star fa-2x text-gray-300"></i></div></div></div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body"><div class="row no-gutters align-items-center"><div class="col mr-2">
+                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Aktivní (dosud nevolaní)</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ active_without_history|default:"N/A" }}</div>
+                </div><div class="col-auto"><i class="fas fa-phone-slash fa-2x text-gray-300"></i></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informace o importech a akční karty -->
+    <div class="row">
+        <div class="col-xl-8">
+            <!-- Akční karty -->
+            <div class="row">
+                <div class="col-lg-6 mb-4">
+                    <div class="card bg-primary text-white shadow">
+                        <div class="card-body">
+                            <i class="fas fa-address-book fa-2x mb-2"></i>
+                            <h4>Správa kontaktů</h4>
+                            <p class="mb-2">Zobrazení, filtrování a editace všech kontaktů.</p>
+                            <a href="{% url 'sprava:contacts_list' %}" class="stretched-link text-white">Přejít na seznam &rarr;</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 mb-4">
+                    <div class="card bg-success text-white shadow">
+                        <div class="card-body">
+                            <i class="fas fa-file-csv fa-2x mb-2"></i>
+                            <h4>Import kontaktů</h4>
+                            <p class="mb-2">Hromadné nahrání kontaktů ze souboru CSV.</p>
+                            <!-- OPRAVENO: Odebrán prefix 'sprava_' -->
+                            <a href="{% url 'sprava:upload_contacts' %}" class="stretched-link text-white">Nahrát soubor &rarr;</a>
+                        </div>
+                    </div>
+                </div>
+                 <div class="col-lg-6 mb-4">
+                    <div class="card bg-danger text-white shadow">
+                        <div class="card-body">
+                            <i class="fas fa-file-excel fa-2x mb-2"></i>
+                            <h4>Import vratek</h4>
+                            <p class="mb-2">Zpracování vrácených zásilek ze souboru XLSX.</p>
+                            <!-- OPRAVENO: Z 'sprava_vratek' na 'vratky' -->
+                            <a href="{% url 'sprava:vratky' %}" class="stretched-link text-white">Nahrát soubor &rarr;</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <!-- Poslední importy -->
+            <div class="card mb-4">
+                <div class="card-header"><i class="fas fa-file-import me-1"></i>Poslední importy</div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Kontakty:
+                            <strong>{% if last_contact_import_date %}{{ last_contact_import_date|date:"d.m.Y H:i" }}{% else %}Žádný záznam{% endif %}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Vratky:
+                            <strong>{% if last_return_import_date %}{{ last_return_import_date|date:"d.m.Y H:i" }}{% else %}Žádný záznam{% endif %}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

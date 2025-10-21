@@ -1,0 +1,189 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}Seznam kontaktů{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-people-fill"></i> Seznam kontaktů</h2>
+</div>
+
+<!-- Karta s filtry (beze změny) -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-funnel-fill"></i> Filtry a vyhledávání</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" action="">
+            <div class="row g-3 align-items-end">
+                <!-- Vyhledávání -->
+                <div class="col-lg-4 col-md-12">
+                    <label for="q" class="form-label">Vyhledat</label>
+                    <input type="text" name="q" id="q" class="form-control" placeholder="Jméno, telefon, info 2..." value="{{ request.GET.q|default:'' }}">
+                </div>
+
+                <!-- Filtr operátora -->
+                <div class="col-lg-3 col-md-6">
+                    <label for="operator-select" class="form-label">Operátor</label>
+                    <select name="operator" id="operator-select" class="form-select">
+                        <option value="">-- Všichni --</option>
+                        {% for op in operators %}
+                            <option value="{{ op.id }}" {% if request.GET.operator|default:'' == op.id|stringformat:"s" %}selected{% endif %}>
+                                {{ op.get_full_name|default:op.username }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Filtr typu zákazníka -->
+                <div class="col-lg-3 col-md-6">
+                    <label for="customer-type-select" class="form-label">Typ zákazníka</label>
+                    <select name="customer_type" id="customer-type-select" class="form-select">
+                        <option value="">-- Všechny typy --</option>
+                        {% for type_opt in customer_type_options %}
+                            <option value="{{ type_opt }}" {% if request.GET.customer_type|default:'' == type_opt %}selected{% endif %}>
+                                {% if type_opt == 'vip' %}VIP{% else %}{{ type_opt }}{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row g-3 align-items-end mt-2">
+                <!-- Filtry data -->
+                <div class="col-lg-4 col-md-12">
+                    <label class="form-label">Datum posledního hovoru</label>
+                    <div class="input-group">
+                        <input type="date" name="last_call_from" class="form-control" value="{{ request.GET.last_call_from|default:'' }}">
+                        <span class="input-group-text">do</span>
+                        <input type="date" name="last_call_to" class="form-control" value="{{ request.GET.last_call_to|default:'' }}">
+                    </div>
+                </div>
+
+                <!-- Filtr stavu -->
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label">Stav</label>
+                    <select name="stav" class="form-select">
+                        <option value="" {% if not request.GET.stav %}selected{% endif %}>Vše</option>
+                        <option value="aktivni" {% if request.GET.stav == 'aktivni' %}selected{% endif %}>Aktivní</option>
+                        <option value="docasne_neaktivni" {% if request.GET.stav == 'docasne_neaktivni' %}selected{% endif %}>Dočasně neaktivní</option>
+                        <option value="trvale_neaktivni" {% if request.GET.stav == 'trvale_neaktivni' %}selected{% endif %}>Trvale neaktivní</option>
+                    </select>
+                </div>
+
+                <!-- Filtry historie -->
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label">Historie</label>
+                    <select name="history" class="form-select">
+                        <option value="" {% if not request.GET.history %}selected{% endif %}>Vše</option>
+                        <option value="yes" {% if request.GET.history == 'yes' %}selected{% endif %}>S historií</option>
+                        <option value="no" {% if request.GET.history == 'no' %}selected{% endif %}>Bez historie</option>
+                    </select>
+                </div>
+
+                <!-- Tlačítka -->
+                <div class="col-lg-2 col-md-12 d-flex align-items-end">
+                    <div class="btn-group w-100">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Filtrovat</button>
+                        <a href="{% url 'sprava:contacts_list' %}" class="btn btn-secondary" title="Vyčistit filtry"><i class="bi bi-x-lg"></i></a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Karta s výsledky (beze změny) -->
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th>Zák. číslo</th>
+                        <th>Jméno</th>
+                        <th>Typ</th>
+                        <th>Stav</th>
+                        <th>Operátor</th>
+                        <th>Hovorů</th>
+                        <th>Posl. hovor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for k in contacts %}
+                    <tr>
+                        <td><a href="{% url 'sprava:kontakt_detail' k.id %}"><code>{{ k.info_2 }}</code></a></td>
+                        <td>{{ k.get_full_name }}</td>
+                        <td>
+                            {% if k.vip %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-star-fill"></i> VIP</span>
+                            {% elif k.recency %}
+                                <span class="badge bg-info">{{ k.recency }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if k.aktivni %}
+                                <span class="badge bg-success">Aktivní</span>
+                            {% elif k.trvale_blokovan %}
+                                <span class="badge bg-dark">Trvale neaktivní</span>
+                            {% else %}
+                                <span class="badge bg-danger">Dočasně neaktivní</span>
+                                {% if k.deaktivovan_do %}
+                                <small class="text-muted d-block">do: {{ k.deaktivovan_do|date:"d.m.Y" }}</small>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if k.assigned_operator %}
+                                {{ k.assigned_operator.get_full_name|default:k.assigned_operator.username }}
+                            {% else %}
+                                <span class="text-muted">- Nepřiřazeno -</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ k.call_count }}</td>
+                        <td>{{ k.last_call|date:"d.m.Y H:i"|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted p-4">
+                            {% if request.GET %}
+                                Vašemu hledání a filtrům neodpovídají žádné kontakty.
+                            {% else %}
+                                V databázi nejsou žádné kontakty.
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- FINÁLNÍ A OPRAVENÉ STRÁNKOVÁNÍ -->
+    {% if contacts.paginator.num_pages > 1 %}
+    <div class="card-footer d-flex justify-content-center">
+        <nav>
+            <ul class="pagination mb-0">
+                {% if contacts.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page=1{% if other_params %}&amp;{{ other_params }}{% endif %}">&laquo;</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ contacts.previous_page_number }}{% if other_params %}&amp;{{ other_params }}{% endif %}">Předchozí</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                    <li class="page-item disabled"><span class="page-link">Předchozí</span></li>
+                {% endif %}
+
+                <li class="page-item active"><span class="page-link">{{ contacts.number }} / {{ contacts.paginator.num_pages }}</span></li>
+
+                {% if contacts.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ contacts.next_page_number }}{% if other_params %}&amp;{{ other_params }}{% endif %}">Další</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ contacts.paginator.num_pages }}{% if other_params %}&amp;{{ other_params }}{% endif %}">&raquo;</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Další</span></li>
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

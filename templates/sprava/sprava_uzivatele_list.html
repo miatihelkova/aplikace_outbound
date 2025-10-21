@@ -1,0 +1,57 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2">{{ page_title }}</h1>
+    
+    <a href="{% url 'sprava:user_create' %}" class="btn btn-success">
+        <i class="fas fa-plus me-2"></i>Přidat nového uživatele
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Příjmení a jméno</th>
+                        <th>Login</th>
+                        <th>Kód operátora</th>
+                        <th>Úvazek (hod)</th>
+                        <th>Akce</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td><strong>{{ u.last_name }} {{ u.first_name }}</strong></td>
+                        <td>{{ u.username }}</td>
+                        <td>{{ u.kod_operatora }}</td>
+                        <td>{{ u.uvazek_hodiny }}</td>
+                        <td>
+                            <a href="{% url 'sprava:user_edit' u.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-pencil-alt"></i> Upravit
+                            </a>
+                        </td>
+                        <td>
+                            <a href="{% url 'sprava:user_delete' u.id %}" class="btn btn-sm btn-outline-danger">  
+                                <i class="fas fa-trash-alt"></i> Smazat  
+                            </a>  
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">
+                            V databázi nejsou žádní uživatelé.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

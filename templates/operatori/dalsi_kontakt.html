@@ -1,0 +1,370 @@
+{% extends "operatori/base_operator.html" %}
+
+{% block title %}Detail kontaktu{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center page-header">
+        <div>
+            <h1>Kontakty</h1>
+            <p class="lead mb-0">Načtěte si další kontakt a zadejte výsledek hovoru.</p>
+        </div>
+        <div>
+            {% if aktivni_filtry_text %}
+                <span class="badge bg-success me-2 fs-6">Aktivní filtr: {{ aktivni_filtry_text }}</span>
+            {% endif %}
+            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasFilters" aria-controls="offcanvasFilters">
+                <i class="bi bi-funnel"></i> Nastavit filtry
+            </button>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if kontakt %}
+        <div class="row">
+            <!-- LEVÝ SLOUPEC: Detail kontaktu a formulář -->
+            <div class="col-lg-7">
+                <!-- Karta s detaily kontaktu -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0">
+                            <i class="bi bi-person-circle text-primary"></i> 
+                            {{ kontakt.titel }} {{ kontakt.vorname }} {{ kontakt.nachname }}
+                            {% if kontakt.vip %}<span class="badge bg-warning text-dark ms-2">VIP</span>{% endif %}
+                        </h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Zákaznické číslo:</strong> {{ kontakt.info_2|default:"-" }}</p>
+                                <p><strong>Přednostní číslo:</strong> {{ kontakt.info_3|default:"-" }}</p>
+                                <p><strong>DBK:</strong> {{ kontakt.info_1|default:"-" }}</p>
+                                <p>
+                                    <strong>Datum narození:</strong>
+                                    {% if kontakt.geburtsdatum %}
+                                        <span {% if kontakt.ma_narozeniny_brzy %}class="badge bg-info text-dark"{% endif %}>
+                                            {{ kontakt.geburtsdatum|date:"d.m.Y" }}
+                                            {% if kontakt.vek is not None %}(věk: {{ kontakt.vek }}){% endif %}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong><i class="bi bi-telephone-fill text-success"></i> Telefon 1:</strong> {{ kontakt.telefon1|default:"-" }}</p>
+                                <p><strong><i class="bi bi-telephone text-secondary"></i> Telefon 2:</strong> {{ kontakt.telefon2|default:"-" }}</p>
+                                <p><strong>Poslední objednávka:</strong> {{ kontakt.posledni_objednavka_format|default:"-" }}</p>
+                                <p><strong>Poslední kontakt:</strong> {{ kontakt.posledni_kontakt_format|default:"-" }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Karta pro zadání výsledku hovoru -->
+                <div class="card shadow-sm">
+                    <div class="card-header">
+                        <h4 class="mb-0"><i class="bi bi-pencil-square"></i> Zadat výsledek hovoru</h4>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="{% url 'operatori:uloz_hovor' kontakt.id %}" id="call-outcome-form">
+                            {% csrf_token %}
+                            
+                            <div class="mb-4">
+                                {{ form.status }}
+                                {% if form.status.errors %}<div class="invalid-feedback d-block">{{ form.status.errors.0 }}</div>{% endif %}
+                            </div>
+
+                            <div class="form-floating mb-3 form-field-wrapper" id="div_id_poznamka" style="display: none;">
+                                {{ form.poznamka }}
+                                <label for="{{ form.poznamka.id_for_label }}"><i class="bi bi-body-text me-2"></i>{{ form.poznamka.label }}</label>
+                                {% if form.poznamka.errors %}<div class="invalid-feedback d-block">{{ form.poznamka.errors.0 }}</div>{% endif %}
+                            </div>
+
+                            <div class="form-floating mb-3 form-field-wrapper" id="div_id_hodnota_objednavky" style="display: none;">
+                                {{ form.hodnota_objednavky }}
+                                <label for="{{ form.hodnota_objednavky.id_for_label }}"><i class="bi bi-cash-coin me-2"></i>{{ form.hodnota_objednavky.label }}</label>
+                                {% if form.hodnota_objednavky.errors %}<div class="invalid-feedback d-block">{{ form.hodnota_objednavky.errors.0 }}</div>{% endif %}
+                            </div>
+
+                            <!-- Další volání -->
+                            <div class="row form-field-wrapper" id="div_id_dalsi_volani" style="display: none;">
+                                <div class="col-md-6 mb-3">
+                                    <label for="{{ form.dalsi_volani_datum.id_for_label }}" class="form-label">{{ form.dalsi_volani_datum.label }}</label>
+                                    {{ form.dalsi_volani_datum }}
+                                    {% if form.dalsi_volani_datum.errors %}<div class="invalid-feedback d-block">{{ form.dalsi_volani_datum.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="{{ form.dalsi_volani_cas.id_for_label }}" class="form-label">{{ form.dalsi_volani_cas.label }}</label>
+                                    <input type="text" name="{{ form.dalsi_volani_cas.name }}" class="form-control flatpickr-time" id="{{ form.dalsi_volani_cas.id_for_label }}" value="{{ form.dalsi_volani_cas.value|default:'' }}" placeholder="Vyberte čas">
+                                    {% if form.dalsi_volani_cas.errors %}<div class="invalid-feedback d-block">{{ form.dalsi_volani_cas.errors.0 }}</div>{% endif %}
+                                </div>
+                            </div>
+
+                            <div class="mb-3 form-field-wrapper" id="div_id_jiny_operator" style="display: none;">
+                                <label for="{{ form.jiny_operator.id_for_label }}" class="form-label fw-bold">{{ form.jiny_operator.label }}</label>
+                                {{ form.jiny_operator }}
+                                {% if form.jiny_operator.errors %}<div class="invalid-feedback d-block">{{ form.jiny_operator.errors.0 }}</div>{% endif %}
+                            </div>
+
+                            <!-- Odložit na -->
+                            <div class="row form-field-wrapper" id="div_id_odlozit_na" style="display: none;">
+                                <div class="col-md-6 mb-3">
+                                    <label for="{{ form.odlozit_na_datum.id_for_label }}" class="form-label">{{ form.odlozit_na_datum.label }}</label>
+                                    {{ form.odlozit_na_datum }}
+                                    {% if form.odlozit_na_datum.errors %}<div class="invalid-feedback d-block">{{ form.odlozit_na_datum.errors.0 }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="{{ form.odlozit_na_cas.id_for_label }}" class="form-label">{{ form.odlozit_na_cas.label }}</label>
+                                    <input type="text" name="{{ form.odlozit_na_cas.name }}" class="form-control flatpickr-time" id="{{ form.odlozit_na_cas.id_for_label }}" value="{{ form.odlozit_na_cas.value|default:'' }}" placeholder="Vyberte čas">
+                                    {% if form.odlozit_na_cas.errors %}<div class="invalid-feedback d-block">{{ form.odlozit_na_cas.errors.0 }}</div>{% endif %}
+                                </div>
+                            </div>
+
+                            <div class="mt-4 d-flex align-items-center gap-2">
+                                <button type="submit" id="submit-button" class="btn btn-primary btn-lg flex-grow-1">
+                                    <i class="bi bi-save me-2"></i>Uložit a další
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" title="Zpracovat příchozí hovor (zatím nefunkční)">
+                                    <i class="bi bi-telephone-inbound"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" title="Vytvořit nový kontakt (zatím nefunkční)">
+                                    <i class="bi bi-person-plus"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" title="Přidat úkol (zatím nefunkční)">
+                                    <i class="bi bi-list-task"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRAVÝ SLOUPEC: Historie -->
+            <div class="col-lg-5">
+                <div class="card shadow-sm">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" id="historyTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="hovory-tab" data-bs-toggle="tab" data-bs-target="#hovory" type="button" role="tab" aria-controls="hovory" aria-selected="true">
+                                    <i class="bi bi-clock-history"></i> Historie hovorů ({{ historie_hovoru|length }})
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="vratky-tab" data-bs-toggle="tab" data-bs-target="#vratky" type="button" role="tab" aria-controls="vratky" aria-selected="false">
+                                    <i class="bi bi-box-arrow-left"></i> Historie vratek ({{ historie_vratek|length }})
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="tab-content" id="historyTabsContent">
+                            <div class="tab-pane fade show active" id="hovory" role="tabpanel" aria-labelledby="hovory-tab">
+                                <div class="list-group list-group-flush" style="max-height: 600px; overflow-y: auto;">
+                                    {% for hovor in historie_hovoru %}
+                                        <div class="list-group-item">
+                                            <div class="d-flex w-100 justify-content-between">
+                                                <h6 class="mb-1">{{ hovor.get_status_display }}</h6>
+                                                <small class="text-muted">{{ hovor.datum_cas|date:"d.m.Y H:i" }}</small>
+                                            </div>
+                                            <p class="mb-1">{{ hovor.poznamka|linebreaksbr|default:"" }}</p>
+                                            <small class="text-muted">Operátor: {{ hovor.operator.username|default:"N/A" }}</small>
+                                            {% if hovor.naplanovany_hovor %}
+                                                <br><small class="text-danger"><strong>Naplánováno na: {{ hovor.naplanovany_hovor|date:"d.m.Y H:i" }}</strong></small>
+                                            {% endif %}
+                                        </div>
+                                    {% empty %}
+                                        <div class="list-group-item">Žádná historie hovorů.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="vratky" role="tabpanel" aria-labelledby="vratky-tab">
+                                <div class="list-group list-group-flush" style="max-height: 600px; overflow-y: auto;">
+                                    {% for vratka in historie_vratek %}
+                                        <div class="list-group-item">
+                                            <div class="d-flex w-100 justify-content-between">
+                                                <h6 class="mb-1">Datum vratky: {{ vratka.datum_vratky|date:"d.m.Y" }}</h6>
+                                                <small class="text-muted">Import: {{ vratka.datum_importu|date:"d.m.Y" }}</small>
+                                            </div>
+                                            <p class="mb-1"><strong>Důvod:</strong> {{ vratka.duvod|default:"Nezadán" }}</p>
+                                            <small class="text-muted">Faktura: {{ vratka.cislo_faktury|default:"N/A" }} ({{ vratka.castka_faktury|default:"-" }} Kč)</small>
+                                        </div>
+                                    {% empty %}
+                                        <div class="list-group-item">Žádná historie vratek.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    {% else %}
+        <div class="text-center p-5 border rounded bg-light mt-4">
+            <h4 class="mb-3"><i class="bi bi-info-circle-fill text-primary"></i> Žádný další kontakt</h4>
+            <p class="lead">V tuto chvíli nebyl nalezen žádný další kontakt, který by odpovídal nastaveným filtrům.</p>
+            <p>Zkuste prosím zrušit nebo upravit aktivní filtr v panelu filtrů.</p>
+        </div>
+    {% endif %}
+
+    <!-- OFFCANVAS PANEL S FILTRY -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasFilters" aria-labelledby="offcanvasFiltersLabel" style="width: 450px;">
+        <div class="offcanvas-header">
+            <h5 id="offcanvasFiltersLabel"><i class="bi bi-funnel"></i> Filtry pro výběr kontaktů</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <p>Vyberte si jeden typ filtru. Filtry nelze kombinovat.</p>
+            
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="filter_type" id="filter_info_3" value="info_3" {% if aktivni_filtr_typ == 'info_3' %}checked{% endif %}>
+                        <label class="form-check-label" for="filter_info_3">Přednostní čísla</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="filter_type" id="filter_kampan" value="kampan" {% if aktivni_filtr_typ == 'kampan' %}checked{% endif %}>
+                        <label class="form-check-label" for="filter_kampan">Kampaň</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="filter_type" id="filter_vratky" value="vratky" {% if aktivni_filtr_typ == 'vratky' %}checked{% endif %}>
+                        <label class="form-check-label" for="filter_vratky">Pouze vratky</label>
+                    </div>
+                </div>
+
+                <div id="info_3_options" class="filter-options" style="display: none;">
+                    <h6>Vyberte přednostní čísla:</h6>
+                    <div class="checkbox-grid">
+                        {% for cislo in prednostni_cisla %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="info_3_values" value="{{ cislo }}" id="info3_{{ cislo }}" {% if cislo in aktivni_filtry.info_3 %}checked{% endif %}>
+                                <label class="form-check-label" for="info3_{{ cislo }}">{{ cislo }}</label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div id="kampan_options" class="filter-options" style="display: none;">
+                    <select name="kampan_value" class="form-select">
+                        <option value="">Vyberte kampaň</option>
+                        {% for kampan in vsechny_kampane %}
+                            <option value="{{ kampan }}" {% if kampan == aktivni_filtry.kampan %}selected{% endif %}>{{ kampan }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div id="vratky_options" class="filter-options" style="display: none;">
+                    <p class="text-muted">Budou vybrány všechny kontakty, které mají záznam o vratce.</p>
+                </div>
+
+                <hr>
+                <div class="d-grid gap-2">
+                    <button type="submit" name="set_filters" class="btn btn-primary"><i class="bi bi-check-lg"></i> Použít filtr</button>
+                    <button type="submit" name="reset_filters" class="btn btn-outline-danger"><i class="bi bi-x-lg"></i> Zrušit filtr</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- INICIALIZACE KALENDÁŘE A VÝBĚRU ČASU ---
+        flatpickr(".flatpickr-date", {
+            "locale": "cs",
+            "dateFormat": "d.m.Y",
+            "allowInput": true,
+        });
+
+        flatpickr(".flatpickr-time", {
+            "locale": "cs",
+            "enableTime": true,
+            "noCalendar": true,
+            "dateFormat": "H:i",
+            "time_24hr": true,
+            "allowInput": true,
+        });
+
+        // --- ZOBRAZENÍ / SKRYTÍ POLÍ PODLE STATUSU ---
+        const statusSelect = document.getElementById('id_status');
+        if (statusSelect) {
+            const fieldWrappers = {
+                poznamka: document.getElementById('div_id_poznamka'),
+                hodnota_objednavky: document.getElementById('div_id_hodnota_objednavky'),
+                dalsi_volani: document.getElementById('div_id_dalsi_volani'),
+                jiny_operator: document.getElementById('div_id_jiny_operator'),
+                odlozit_na: document.getElementById('div_id_odlozit_na')
+            };
+
+            function updateFormVisibility() {
+                const selectedStatus = statusSelect.value;
+                Object.values(fieldWrappers).forEach(wrapper => {
+                    if (wrapper) wrapper.style.display = 'none';
+                });
+
+                switch (selectedStatus) {
+                    case 'nedovolano':
+                        fieldWrappers.odlozit_na.style.display = 'flex';
+                        break;
+                    case 'nezajem':
+                    case 'nerelevance':
+                    case 'neexistujici':
+                    case 'nemluveno':
+                        fieldWrappers.poznamka.style.display = 'block';
+                        break;
+                    case 'volat_pozdeji':
+                        fieldWrappers.poznamka.style.display = 'block';
+                        fieldWrappers.dalsi_volani.style.display = 'flex';
+                        break;
+                    case 'prodej':
+                    case 'vip':
+                        fieldWrappers.poznamka.style.display = 'block';
+                        fieldWrappers.hodnota_objednavky.style.display = 'block';
+                        fieldWrappers.dalsi_volani.style.display = 'flex';
+                        break;
+                    case 'predat_operatorovi':
+                        fieldWrappers.poznamka.style.display = 'block';
+                        fieldWrappers.jiny_operator.style.display = 'block';
+                        fieldWrappers.odlozit_na.style.display = 'flex';
+                        break;
+                }
+            }
+            updateFormVisibility(); 
+            statusSelect.addEventListener('change', updateFormVisibility);
+        }
+
+        // --- BLOKOVÁNÍ TLAČÍTKA PŘI ODESÍLÁNÍ ---
+        const callForm = document.getElementById('call-outcome-form');
+        if (callForm) {
+            callForm.addEventListener('submit', function() {
+                const submitButton = document.getElementById('submit-button');
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Ukládám...';
+            });
+        }
+
+        // --- PŘEPÍNÁNÍ FILTRŮ V OFFCANVAS ---
+        const filterTypeRadios = document.querySelectorAll('input[name="filter_type"]');
+        const optionContainers = document.querySelectorAll('.filter-options');
+        function toggleFilterOptions() {
+            let selectedType = document.querySelector('input[name="filter_type"]:checked');
+            optionContainers.forEach(container => container.style.display = 'none');
+            if (selectedType) {
+                const targetContainer = document.getElementById(selectedType.value + '_options');
+                if (targetContainer) targetContainer.style.display = 'block';
+            }
+        }
+        filterTypeRadios.forEach(radio => radio.addEventListener('change', toggleFilterOptions));
+        toggleFilterOptions();
+    });
+    </script>
+{% endblock %}

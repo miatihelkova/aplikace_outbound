@@ -1,0 +1,81 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h4 class="mb-0"><i class="bi bi-telephone-inbound-fill"></i> {{ page_title }}</h4>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>Datum a čas</th>
+                        <th>Kontakt</th>
+                        <th>Operátor</th>
+                        <th>Status</th>
+                        <th>Poznámka</th>
+                        <th>Objednávka</th>
+                        <th>Odloženo na</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in historie_page %}
+                    <tr>
+                        <td class="text-nowrap">{{ h.datum_cas|date:"d.m.Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'sprava:kontakt_detail' h.kontakt.id %}">
+                                {{ h.kontakt.get_full_name|default:"N/A" }}
+                            </a>
+                        </td>
+                        <td>{{ h.operator.get_full_name|default:h.operator.username|default:"-" }}</td>
+                        <td><span class="badge bg-secondary fw-normal">{{ h.get_status_display|default:"-" }}</span></td>
+                        <td style="min-width: 200px;">{{ h.poznamka|truncatechars:80|default:"-" }}</td>
+                        <td class="text-nowrap">
+                            {% if h.hodnota_objednavky %}
+                                {{ h.hodnota_objednavky }} Kč
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap">
+                            {% if h.naplanovany_hovor %}
+                                {{ h.naplanovany_hovor|date:"d.m.Y H:i" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">Nebyly nalezeny žádné záznamy o hovorech.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer">
+        <!-- Stránkování -->
+        {% if historie_page.has_other_pages %}
+        <nav aria-label="Stránkování historie">
+            <ul class="pagination justify-content-center mb-0">
+                {% if historie_page.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page=1">&laquo; První</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ historie_page.previous_page_number }}">Předchozí</a></li>
+                {% endif %}
+
+                <li class="page-item disabled"><span class="page-link">Stránka {{ historie_page.number }} z {{ historie_page.paginator.num_pages }}</span></li>
+
+                {% if historie_page.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ historie_page.next_page_number }}">Další</a></li>
+                    <li class="page-item"><a class="page-link" href="?page={{ historie_page.paginator.num_pages }}">Poslední &raquo;</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

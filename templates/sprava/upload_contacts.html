@@ -1,0 +1,53 @@
+{% extends "sprava/base.html" %}
+
+{% block title %}Import kontaktů z CSV{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-cloud-upload-fill"></i> Import kontaktů z CSV</h2>
+        <p class="lead">Nahrání a aktualizace kontaktů pomocí souboru ve formátu CSV.</p>
+    </div>
+</div>
+
+<!-- Zobrazení zpráv (messages) -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- Formulář pro nahrání -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-file-earmark-spreadsheet-fill"></i> Vyberte soubor k nahrání
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="mb-3">
+                {{ form.file.label_tag }}
+                {{ form.file }}
+                
+                {% if form.file.help_text %}
+                    <div class="form-text">{{ form.file.help_text }}</div>
+                {% endif %}
+
+                {% for error in form.file.errors %}
+                    <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle-fill"></i> Nahrát a zpracovat</button>
+        </form>
+    </div>
+    <div class="card-footer text-muted">
+        <p class="mb-1"><strong>Očekávané názvy sloupců v CSV:</strong></p>
+        <pre class="mb-0" style="font-size: 0.8em;"><code>info_2, info_3, Ansprache, Titel, Vorname, Nachname, dlbs, info_1, Telefon1, Telefon2, TLM-Kampagne 2 - Zielprodukt, Strasse, Ort, Plz, Recency, Datum Letztkontakt, Geburtsdatum</code></pre>
+    </div>
+</div>
+{% endblock %}
