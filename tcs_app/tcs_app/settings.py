@@ -74,10 +74,15 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-LANGUAGE_CODE = 'cs' # VYLEPŠENÍ: Nastaveno na češtinu
-TIME_ZONE = 'Europe/Prague' # VYLEPŠENÍ: Nastavena správná časová zóna
+LANGUAGE_CODE = 'cs-cz'
+TIME_ZONE = 'Europe/Prague' 
 USE_I18N = True
+USE_L10N = True
 USE_TZ = True
+
+DATE_INPUT_FORMATS = ['%d.%m.%Y']  
+TIME_INPUT_FORMATS = ['%H:%M']  
+DATETIME_INPUT_FORMATS = ['%d.%m.%Y %H:%M']
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'

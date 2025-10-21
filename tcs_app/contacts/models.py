@@ -1,6 +1,9 @@
+# contacts/models.py
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from datetime import datetime # Důležitý import
 
 STATUS_CHOICES = [
     ('nedovolano', 'Nedovoláno'),
@@ -14,7 +17,16 @@ STATUS_CHOICES = [
     ('predat_operatorovi', 'Předat na jiného operátora'),
 ]
 
+# --- PŘIDÁNO (pro statistiky) ---
+class TypAkce(models.TextChoices):
+    SPOJENY_HOVOR = 'SPOJENY', 'Spojený hovor'
+    NESPOJENY_HOVOR = 'NESPOJENY', 'Nespojený hovor'
+    INTERNI_AKCE = 'INTERNI', 'Interní akce'
+# --- KONEC PŘIDÁNÍ ---
+
+
 class Kontakt(models.Model):
+    # ... všechna pole zůstávají stejná ...
     info_2 = models.CharField(max_length=50, blank=True,  null=True, db_index=True, unique=True, verbose_name="Zákaznické číslo")
     info_3 = models.CharField(max_length=50, blank=True, default='', db_index=True, verbose_name="Přednostní číslo")
     ansprache = models.CharField(max_length=20, blank=True, default='', verbose_name="Oslovení (Pohlaví)")
@@ -37,6 +49,11 @@ class Kontakt(models.Model):
     vip_poznamka = models.TextField(blank=True, default='', verbose_name="Interní poznámka k VIP")
     trvale_blokovan = models.BooleanField(default=False, verbose_name="Trvale blokovaný kontakt")
     nedovolano_pocet = models.PositiveIntegerField(default=0, verbose_name="Počet pokusů Nedovoláno")
+    
+    # --- PŘIDÁNO (pro novou logiku statusů) ---
+    nedovolano_v_rade = models.PositiveIntegerField(default=0, verbose_name="Počet 'Nedovoláno' v řadě")
+    # --- KONEC PŘIDÁNÍ ---
+
     odlozeny_nedovolano_pokusy = models.PositiveIntegerField(default=0, verbose_name="Počet pokusů Nedovoláno (odložené)")
     blokace_do = models.DateTimeField(null=True, blank=True, verbose_name="Blokace do")
     aktivni = models.BooleanField(default=True, verbose_name="Aktivní kontakt")
@@ -54,15 +71,88 @@ class Kontakt(models.Model):
         blank=True,  
         verbose_name="Datum posledního přiřazení"  
     )
+    
+    # === ZDE JE PŘIDANÉ NOVÉ POLE ===
+    deaktivovan_do = models.DateField(null=True, blank=True, verbose_name="Deaktivován do")
+    # =================================
 
     def __str__(self):
         full_name = f"{self.vorname} {self.nachname}".strip()
         return f"{full_name} ({self.info_2 or 'bez čísla'})"
 
+    @property
+    def vek(self):
+        if not self.geburtsdatum:
+            return None
+        today = timezone.now().date()
+        return today.year - self.geburtsdatum.year - ((today.month, today.day) < (self.geburtsdatum.month, self.geburtsdatum.day))
+
+    def _format_date_string(self, date_string):
+        if not date_string:
+            return "-"
+        formats_to_try = ['%Y-%m-%d', '%d-%m-%Y', '%d.%m.%Y']
+        for fmt in formats_to_try:
+            try:
+                date_part = date_string.split(' ')[0]
+                date_obj = datetime.strptime(date_part, fmt).date()
+                return date_obj.strftime('%d.%m.%Y')
+            except (ValueError, IndexError):
+                continue
+        return date_string
+
+    @property
+    def posledni_objednavka_format(self):
+        return self._format_date_string(self.dlbs)
+
+    @property
+    def posledni_kontakt_format(self):
+        return self._format_date_string(self.datum_letztkontakt)
+
     class Meta:
         verbose_name = "Kontakt"
         verbose_name_plural = "Kontakty"
 
+
+class Historie(models.Model):  
+    kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name='historie')  
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)  
+    datum_cas = models.DateTimeField(auto_now_add=True)  
+      
+    # --- PŘIDÁNO (pro statistiky) ---
+    typ_akce = models.CharField(
+        max_length=20,
+        choices=TypAkce.choices,
+        verbose_name="Typ akce",
+        null=True, 
+        blank=True
+    )
+    # --- KONEC PŘIDÁNÍ ---
+
+    status = models.CharField(  
+        max_length=20,   
+        choices=STATUS_CHOICES,   
+        verbose_name="Status hovoru",  
+        blank=True,
+        default=''  
+    )  
+    poznamka = models.TextField(verbose_name="Poznámka k hovoru")  
+    naplanovany_hovor = models.DateTimeField(  
+        null=True,   
+        blank=True,   
+        verbose_name="Datum naplánovaného hovoru"  
+    )
+    
+    # --- PŘIDÁNO (pro status Prodej/VIP) ---
+    hodnota_objednavky = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Hodnota objednávky"
+    )
+    # --- KONEC PŘIDÁNÍ ---
+
+# ... zbytek souboru (Korespondence, DopisovaSablona, atd.) zůstává stejný ...
 class Korespondence(models.Model):
     kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name="korespondence")
     datum = models.DateTimeField(auto_now_add=True, verbose_name="Datum vytvoření")
@@ -173,23 +263,3 @@ class Vratka(models.Model):
     def __str__(self):
         datum_str = self.datum_vratky.strftime('%d.%m.%Y') if self.datum_vratky else "N/A"
         return f"Vratka pro {self.kontakt} ze dne {datum_str}"
-
-class Historie(models.Model):  
-    kontakt = models.ForeignKey(Kontakt, on_delete=models.CASCADE, related_name='historie')  
-    operator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)  
-    datum_cas = models.DateTimeField(auto_now_add=True)  
-      
-    # --- NOVÁ POLE ---  
-    status = models.CharField(  
-        max_length=20,   
-        choices=STATUS_CHOICES,   
-        verbose_name="Status hovoru",  
-        blank=True, # Povolíme prázdné pro případ, že jde jen o poznámku  
-        default=''  
-    )  
-    poznamka = models.TextField(verbose_name="Poznámka k hovoru")  
-    naplanovany_hovor = models.DateTimeField(  
-        null=True,   
-        blank=True,   
-        verbose_name="Datum naplánovaného hovoru"  
-    )
