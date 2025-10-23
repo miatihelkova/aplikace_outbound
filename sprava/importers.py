@@ -34,7 +34,7 @@ def _fix_chars(text):
     return text
 
 # =============================================================================
-# LOGIKA PRO IMPORT KONTAKTŮ (CSV)
+# LOGIKA PRO IMPORT KONTAKTŮ (CSV) - ZDE JSOU ÚPRAVY
 # =============================================================================
 
 def import_contacts_from_csv(csv_file):
@@ -56,8 +56,12 @@ def import_contacts_from_csv(csv_file):
     existing_by_telefon1 = {k.telefon1: k for k in Kontakt.objects.filter(telefon1__in=all_telefon1)}
     
     contacts_to_create = []
-    contacts_to_update = []
+    # --- ZMĚNA 1: Použijeme slovník pro zajištění unikátnosti kontaktů k aktualizaci ---
+    contacts_to_update_dict = {}
     seen_keys = set()
+    
+    # --- ZMĚNA 2: Získáme aktuální čas pouze jednou pro celý import ---
+    import_time = timezone.now()
 
     with transaction.atomic():
         for raw_row in rows:
@@ -73,11 +77,18 @@ def import_contacts_from_csv(csv_file):
 
             existing_kontakt = existing_by_info_2.get(info_2) if info_2 else existing_by_telefon1.get(telefon1)
 
+            # --- ZMĚNA 3: Upravená logika pro aktualizaci existujících kontaktů ---
             if existing_kontakt:
                 new_info3 = _norm_text(row.get("info_3"))
+                # Aktualizujeme info_3, pokud se liší
                 if existing_kontakt.info_3 != new_info3:
                     existing_kontakt.info_3 = new_info3
-                    contacts_to_update.append(existing_kontakt)
+                
+                # VŽDY aktualizujeme datum importu
+                existing_kontakt.datum_importu = import_time
+                
+                # Přidáme kontakt do slovníku (klíč je ID, tím zajistíme unikátnost)
+                contacts_to_update_dict[existing_kontakt.pk] = existing_kontakt
             else:
                 datum_str = _norm_text(row.get("Geburtsdatum"))
                 geburtsdatum = None
@@ -85,7 +96,6 @@ def import_contacts_from_csv(csv_file):
                     try: geburtsdatum = datetime.strptime(datum_str, "%d-%m-%Y").date()
                     except (ValueError, TypeError): pass
                 
-                # --- ZMĚNA 1: Přehlednější vytvoření instance ---
                 data = {
                     'info_2': info_2, 'info_3': _norm_text(row.get("info_3")),
                     'ansprache': _norm_text(row.get("Ansprache")), 'titel': _norm_text(row.get("Titel")),
@@ -97,6 +107,8 @@ def import_contacts_from_csv(csv_file):
                     'strasse': _norm_text(row.get("Strasse")), 'ort': _norm_text(row.get("Ort")),
                     'plz': _norm_text(row.get("Plz")), 'recency': _norm_text(row.get("Recency")),
                     'vip': False, 'aktivni': True,
+                    # --- ZMĚNA 4: Přidáme datum importu i pro nově vytvářené kontakty ---
+                    'datum_importu': import_time,
                 }
                 contacts_to_create.append(Kontakt(**data))
 
@@ -104,14 +116,17 @@ def import_contacts_from_csv(csv_file):
             created_objs = Kontakt.objects.bulk_create(contacts_to_create, ignore_conflicts=True)
             created_count = len(created_objs)
         
-        if contacts_to_update:
-            Kontakt.objects.bulk_update(contacts_to_update, fields=['info_3'])
+        # --- ZMĚNA 5: Aktualizujeme všechny nasbírané kontakty ---
+        if contacts_to_update_dict:
+            contacts_to_update = list(contacts_to_update_dict.values())
+            # Aktualizujeme obě pole: info_3 a datum_importu
+            Kontakt.objects.bulk_update(contacts_to_update, fields=['info_3', 'datum_importu'])
             updated_count = len(contacts_to_update)
 
     return {"success": True, "total": len(rows), "created": created_count, "updated": updated_count, "skipped": skipped_duplicates}
 
 # =============================================================================
-# LOGIKA PRO IMPORT VRATEK (XLSX) - REFAKTOROVÁNO PRO VÝKON
+# LOGIKA PRO IMPORT VRATEK (XLSX) - BEZE ZMĚNY
 # =============================================================================
 
 def import_vratky_from_excel(excel_file):

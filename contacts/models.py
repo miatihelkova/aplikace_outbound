@@ -66,6 +66,39 @@ class Kontakt(models.Model):
     )
     deaktivovan_do = models.DateField(null=True, blank=True, verbose_name="Deaktivován do")
 
+    # NOVÉ POLE: Datum posledního importu nebo aktualizace kontaktu
+    datum_importu = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Datum importu/aktualizace"
+    )
+
+    # NOVÉ POLE: Datum posledního prodeje pro sledování 90denní lhůty
+    datum_posledniho_prodeje = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Datum posledního prodeje"
+    )
+
+    # NOVÉ POLE: Kdo má kontakt dočasně zamčený
+    locked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="locked_contacts",
+        verbose_name="Dočasně uzamčeno operátorem"
+    )
+
+    # NOVÉ POLE: Kdy byl kontakt zamčen
+    locked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Čas uzamčení"
+    )
+
+
     # === ZDE JE PŘIDANÁ NOVÁ METODA ===
     def get_full_name(self):
         """Vrací celé jméno kontaktu spojené mezerou."""

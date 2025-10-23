@@ -5,8 +5,10 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.contrib import messages
-from django.db.models import Q
-from django.db.models.functions import Right
+from django.db import transaction
+from django.db.models import Q, F, Subquery, OuterRef, Value
+from django.db.models.fields import CharField
+from django.db.models.functions import Right, Cast
 from contacts.models import Kontakt, Historie, TypAkce
 from .forms import CallOutcomeForm
 from datetime import date, timedelta, datetime, time
@@ -17,7 +19,7 @@ def get_next_monday():
     days_until_monday = 7 - today.weekday()
     return today + timedelta(days=days_until_monday)
 
-# --- POHLED PRO UKLÁDÁNÍ VÝSLEDKU HOVORU (beze změny) ---
+# --- POHLED PRO UKLÁDÁNÍ VÝSLEDKU HOVORU (z kroku 3) ---
 @login_required
 @require_POST
 def uloz_hovor(request, kontakt_id):
@@ -29,7 +31,14 @@ def uloz_hovor(request, kontakt_id):
         data = form.cleaned_data
         status = data['status']
         now = timezone.now()
-        
+
+        # 1. Okamžitě uvolníme dočasný zámek kontaktu
+        kontakt.locked_by = None
+        kontakt.locked_at = None
+
+        # 2. Ve výchozím stavu se po uložení operátor odebere
+        kontakt.assigned_operator = None
+
         dalsi_volani = data.get('dalsi_volani')
         if dalsi_volani:
             dalsi_volani = timezone.make_aware(dalsi_volani)
@@ -49,23 +58,25 @@ def uloz_hovor(request, kontakt_id):
             historie.typ_akce = TypAkce.NESPOJENY_HOVOR
             kontakt.deaktivovan_do = now.date() + timedelta(days=90)
             kontakt.aktivni = False
-            kontakt.assigned_operator = None
+            kontakt.nedovolano_v_rade = 0
         elif status == 'nerelevance':
             historie.typ_akce = TypAkce.INTERNI_AKCE
             kontakt.deaktivovan_do = get_next_monday()
             kontakt.aktivni = False
-            kontakt.assigned_operator = None
+            kontakt.nedovolano_v_rade = 0
         elif status == 'neexistujici':
             historie.typ_akce = TypAkce.NESPOJENY_HOVOR
             kontakt.aktivni = False
             kontakt.trvale_blokovan = True
-            kontakt.assigned_operator = None
+            kontakt.nedovolano_v_rade = 0
         elif status == 'prodej':
             historie.typ_akce = TypAkce.SPOJENY_HOVOR
             historie.naplanovany_hovor = dalsi_volani
             historie.hodnota_objednavky = data['hodnota_objednavky']
             kontakt.assigned_operator = operator
+            kontakt.datum_posledniho_prodeje = now
             kontakt.aktivni = True
+            kontakt.nedovolano_v_rade = 0
         elif status == 'vip':
             historie.typ_akce = TypAkce.SPOJENY_HOVOR
             historie.naplanovany_hovor = dalsi_volani
@@ -74,32 +85,40 @@ def uloz_hovor(request, kontakt_id):
             kontakt.vip_pridano = now
             kontakt.assigned_operator = operator
             kontakt.aktivni = True
+            kontakt.nedovolano_v_rade = 0
         elif status == 'nedovolano':
             historie.typ_akce = TypAkce.NESPOJENY_HOVOR
+            kontakt.nedovolano_v_rade += 1
+            if kontakt.nedovolano_v_rade >= 7:
+                kontakt.aktivni = False
+
             if odlozit_na:
                 historie.naplanovany_hovor = odlozit_na
                 kontakt.assigned_operator = operator
                 kontakt.aktivni = True
+            elif not kontakt.aktivni:
+                pass
             else:
                 kontakt.deaktivovan_do = get_next_monday()
                 kontakt.aktivni = False
-                kontakt.assigned_operator = None
         elif status == 'volat_pozdeji':
             historie.typ_akce = TypAkce.SPOJENY_HOVOR
             historie.naplanovany_hovor = dalsi_volani
             kontakt.assigned_operator = operator
             kontakt.aktivni = True
+            kontakt.nedovolano_v_rade = 0
         elif status == 'nemluveno':
             historie.typ_akce = TypAkce.SPOJENY_HOVOR
             kontakt.deaktivovan_do = get_next_monday()
             kontakt.aktivni = False
-            kontakt.assigned_operator = None
+            kontakt.nedovolano_v_rade = 0
         elif status == 'predat_operatorovi':
             historie.typ_akce = TypAkce.INTERNI_AKCE
             kontakt.assigned_operator = data['jiny_operator']
             kontakt.aktivni = True
             if odlozit_na:
                 historie.naplanovany_hovor = odlozit_na
+            kontakt.nedovolano_v_rade = 0
 
         historie.save()
         kontakt.save()
@@ -202,57 +221,130 @@ def zobraz_kontakt(request, kontakt_id):
     }
     return render(request, 'operatori/dalsi_kontakt.html', context)
 
-# --- POHLED PRO NALEZENÍ DALŠÍHO KONTAKTU (KOMPLETNĚ OPRAVENO) ---
+# --- POHLED PRO NALEZENÍ DALŠÍHO KONTAKTU (KOMPLETNĚ PŘEPSÁNO) ---
 @login_required
 def dalsi_kontakt(request):
-    now = timezone.now()
     operator = request.user
-
-    # Základní sada kontaktů, které jsou vůbec k dispozici
-    # 1. Musí být aktivní a ne trvale blokované
-    # 2. Nesmí být dočasně deaktivované (deaktivovan_do je v budoucnu)
-    # 3. Nesmí mít naplánovaný hovor v budoucnu
-    base_queryset = Kontakt.objects.filter(
-        aktivni=True,
-        trvale_blokovan=False
-    ).filter(
-        Q(deaktivovan_do__isnull=True) | Q(deaktivovan_do__lte=now.date())
-    ).exclude(
-        historie__naplanovany_hovor__gt=now
-    )
-
-    # Aplikace filtrů ze session
-    kampan = request.session.get('filter_kampan')
-    info_3_list = request.session.get('filter_info_3')
-    vratky = request.session.get('filter_vratky')
-
-    if kampan:
-        base_queryset = base_queryset.filter(tlm_kampagne_2_zielprodukt=kampan)
-    elif info_3_list:
-        base_queryset = base_queryset.annotate(last_two_info3=Right('info_3', 2)).filter(last_two_info3__in=info_3_list)
-    elif vratky:
-        base_queryset = base_queryset.filter(vratky__isnull=False).distinct()
-
+    now = timezone.now()
+    lock_timeout = now - timedelta(minutes=60)
     kontakt = None
 
-    # Priorita 1: Najít kontakt přiřazený aktuálnímu operátorovi
-    kontakt = base_queryset.filter(assigned_operator=operator).order_by('datum_prirazeni', 'id').first()
+    # Uvolníme všechny zámky starší než 60 minut
+    Kontakt.objects.filter(locked_at__lt=lock_timeout).update(locked_by=None, locked_at=None)
+    # Uvolníme zámek, který mohl zůstat aktuálnímu operátorovi z minula
+    Kontakt.objects.filter(locked_by=operator).update(locked_by=None, locked_at=None)
 
-    # Priorita 2: Pokud žádný takový není, najít jakýkoliv volný (nepřiřazený) kontakt
+    # Subquery pro nalezení posledního naplánovaného hovoru
+    latest_scheduled_call_subquery = Historie.objects.filter(
+        kontakt=OuterRef('pk'),
+        naplanovany_hovor__isnull=False
+    ).order_by('-naplanovany_hovor').values('naplanovany_hovor')[:1]
+
+    # Subquery pro nalezení data posledního hovoru
+    latest_history_date_subquery = Historie.objects.filter(
+        kontakt=OuterRef('pk')
+    ).order_by('-datum_cas').values('datum_cas')[:1]
+
+    # --- Priorita 1: Odložené kontakty ---
+    # Hledáme kontakty přiřazené operátorovi, jejichž poslední naplánovaný hovor už měl proběhnout
+    p1_queryset = Kontakt.objects.annotate(
+        latest_scheduled_call=Subquery(latest_scheduled_call_subquery)
+    ).filter(
+        assigned_operator=operator,
+        latest_scheduled_call__lte=now
+    ).order_by('latest_scheduled_call')
+
+    with transaction.atomic():
+        kontakt = p1_queryset.select_for_update(skip_locked=True).first()
+
+    # --- Priorita 2: VIP kontakty ---
     if not kontakt:
-        kontakt = base_queryset.filter(assigned_operator__isnull=True).order_by('id').first()
+        # Hledáme VIP kontakty přiřazené operátorovi, které nemají naplánovaný žádný budoucí hovor
+        p2_queryset = Kontakt.objects.annotate(
+            latest_history_date=Subquery(latest_history_date_subquery)
+        ).filter(
+            vip=True,
+            assigned_operator=operator
+        ).exclude(
+            historie__naplanovany_hovor__gt=now
+        ).order_by('latest_history_date') # Nejstarší poslední hovor první
 
-    # Pokud jsme našli volný kontakt, přiřadíme ho operátorovi
-    if kontakt and not kontakt.assigned_operator:
-        kontakt.assigned_operator = operator
-        kontakt.datum_prirazeni = now
-        kontakt.save(update_fields=['assigned_operator', 'datum_prirazeni'])
+        with transaction.atomic():
+            kontakt = p2_queryset.select_for_update(skip_locked=True).first()
 
+    # --- Priorita 3: Běžné kontakty ---
+    if not kontakt:
+        # Získáme seznam všech dat importu, seřazený od nejnovějšího
+        import_dates = Kontakt.objects.filter(
+            aktivni=True, datum_importu__isnull=False
+        ).values_list('datum_importu', flat=True).distinct().order_by('-datum_importu')
+
+        # Procházíme data importu od nejnovějšího
+        for import_date in import_dates:
+            # Základní sada kontaktů pro tento import
+            base_p3_queryset = Kontakt.objects.filter(
+                aktivni=True,
+                trvale_blokovan=False,
+                datum_importu=import_date,
+                assigned_operator__isnull=True
+            ).exclude(
+                historie__naplanovany_hovor__gt=now
+            ).annotate(
+                dbk_int=Cast(
+                    # Nahradíme čárku tečkou pro správné přetypování a ošetříme prázdné hodnoty
+                    F('info_1'), 
+                    output_field=CharField()
+                )
+            )
+
+            # Aplikace filtrů ze session
+            kampan = request.session.get('filter_kampan')
+            info_3_list = request.session.get('filter_info_3')
+            vratky = request.session.get('filter_vratky')
+
+            if kampan:
+                base_p3_queryset = base_p3_queryset.filter(tlm_kampagne_2_zielprodukt=kampan)
+            elif info_3_list:
+                base_p3_queryset = base_p3_queryset.annotate(last_two_info3=Right('info_3', 2)).filter(last_two_info3__in=info_3_list)
+            elif vratky:
+                base_p3_queryset = base_p3_queryset.filter(vratky__isnull=False).distinct()
+
+            # Řazení podle DBK (info_1) - sestupně, NULL na konci
+            # Poznámka: Přetypování na číslo je složité, pokud DBK obsahuje i text.
+            # Prozatím řadíme jako text. Pro přesné číselné řazení by bylo potřeba vyčistit data.
+            ordered_p3_queryset = base_p3_queryset.order_by(F('dbk_int').desc(nulls_last=True))
+
+            # Pokusíme se najít kontakt v každé pod-prioritě
+            queries_to_try = [
+                # 3a: Bez historie hovorů
+                ordered_p3_queryset.filter(historie__isnull=True),
+                # 3b: S prodejem v historii
+                ordered_p3_queryset.filter(historie__status='prodej').distinct(),
+                # 3c: Poslední 3 hovory nejsou "nedovoláno" - zjednodušená logika
+                # Vyloučíme ty, co mají 3 a více nedovoláno v řadě
+                ordered_p3_queryset.filter(nedovolano_v_rade__lt=3),
+                # 3d: Ostatní (celá sada, protože předchozí dotazy jsou podmnožiny)
+                ordered_p3_queryset
+            ]
+
+            for queryset in queries_to_try:
+                with transaction.atomic():
+                    kontakt = queryset.select_for_update(skip_locked=True).first()
+                    if kontakt:
+                        break  # Našli jsme kontakt, vyskočíme z cyklu dotazů
+            
+            if kontakt:
+                break # Našli jsme kontakt, vyskočíme z cyklu importů
+
+    # Pokud jsme našli jakýkoliv volný kontakt (z P1, P2 nebo P3), zamkneme ho
     if kontakt:
+        kontakt.locked_by = operator
+        kontakt.locked_at = now
+        kontakt.save(update_fields=['locked_by', 'locked_at'])
         return redirect('operatori:zobraz_kontakt', kontakt_id=kontakt.id)
     else:
         # Pokud není nalezen žádný kontakt, zobrazíme stránku s filtry
-        messages.warning(request, "Nebyly nalezeny žádné další kontakty odpovídající filtru.")
+        messages.warning(request, "Nebyly nalezeny žádné další dostupné kontakty.")
         vsechny_kampane = Kontakt.objects.values_list('tlm_kampagne_2_zielprodukt', flat=True).distinct().order_by('tlm_kampagne_2_zielprodukt')
         prednostni_cisla_qs = Kontakt.objects.annotate(last_two=Right('info_3', 2)).values_list('last_two', flat=True).distinct().order_by('last_two')
         context = {
